@@ -1,0 +1,264 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} { allow read, write: if false; }
+
+    // ===============================================================
+    // Global Primitives & Helpers
+    // ===============================================================
+    function isValidId(id) { 
+      // Need it to be up to 256 to support unpredictable Date.now() string appends
+      return id is string && id.size() > 0 && id.size() <= 256; 
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { 
+      return request.auth != null; 
+    }
+    function isVerified() {
+      // Allow general signin for mobile number flows etc
+      return isSignedIn(); 
+    }
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        (request.auth.token.email == "viduthminsara106@gmail.com" || request.auth.token.email == "07123456@primeshelf.local")
+      );
+    }
+
+    // ===============================================================
+    // Schemas
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'mobileNumber', 'role', 'balance', 'createdAt']) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.mobileNumber is string && data.mobileNumber.size() <= 20 &&
+             data.role in ['user', 'admin'] &&
+             data.balance is number &&
+             data.createdAt is timestamp &&
+             (
+               !('lastCheckIn' in data) || data.lastCheckIn is timestamp
+             ) &&
+             (
+               !('bankDetails' in data) || (
+                 data.bankDetails.keys().hasAll(['holderName', 'bankName', 'accountNumber']) &&
+                 data.bankDetails.holderName is string && data.bankDetails.holderName.size() <= 100 &&
+                 data.bankDetails.bankName is string && data.bankDetails.bankName.size() <= 100 &&
+                 data.bankDetails.accountNumber is string && data.bankDetails.accountNumber.size() <= 50
+               )
+             );
+    }
+
+    function isValidUserPublic(data) {
+      return data.keys().hasAll(['uid', 'mobileNumber', 'totalRecharge', 'createdAt']) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.mobileNumber is string && data.mobileNumber.size() <= 20 &&
+             data.totalRecharge is number &&
+             data.createdAt is timestamp &&
+             (
+               !('referredBy' in data) || (data.referredBy is string && data.referredBy.size() <= 128)
+             );
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['userId', 'amount', 'type', 'status', 'createdAt']) &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.amount is number && 
+             data.type in ['recharge', 'withdraw', 'withdrawal', 'reward', 'purchase', 'income', 'deposit', 'redeem'] &&
+             data.status in ['pending', 'completed', 'failed'] &&
+             data.createdAt is timestamp &&
+             (
+               !('description' in data) || (data.description is string && data.description.size() <= 500)
+             ) &&
+             (
+               !('receiptImage' in data) || (data.receiptImage is string)
+             ) &&
+             (
+               !('bankDetails' in data) || (data.bankDetails is map)
+             );
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['userId', 'planId', 'amount', 'dailyIncome', 'duration', 'remainingDays', 'status', 'createdAt']) &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.planId is string && data.planId.size() <= 128 &&
+             data.amount is number &&
+             data.dailyIncome is number &&
+             data.duration is number &&
+             data.remainingDays is number &&
+             data.status in ['active', 'completed'] &&
+             data.createdAt is timestamp &&
+             ( !('lastIncomeAt' in data) || data.lastIncomeAt is timestamp ) &&
+             ( !('planName' in data) || data.planName is string ) &&
+             ( !('activatedAt' in data) || data.activatedAt is timestamp ) &&
+             ( !('lastCollectedAt' in data) || data.lastCollectedAt is timestamp ) &&
+             ( !('totalObtained' in data) || data.totalObtained is number ) &&
+             ( !('price' in data) || data.price is number ) &&
+             ( !('daysServed' in data) || data.daysServed is number );
+    }
+
+    function isValidRedeemCode(data) {
+      return data.keys().hasAll(['code', 'amount', 'used', 'createdAt']) &&
+             data.code is string && data.code.size() <= 50 &&
+             data.amount is number &&
+             data.used is bool &&
+             data.createdAt is timestamp &&
+             ( !('usedCount' in data) || data.usedCount is number ) &&
+             ( !('usageLimit' in data) || data.usageLimit is number );
+    }
+
+    function isValidRedemption(data) {
+      return data.keys().hasAll(['userId', 'code', 'amount', 'createdAt']) &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.code is string && data.code.size() <= 50 &&
+             data.amount is number &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow get: if isVerified() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      
+      allow create: if isVerified() && isValidId(userId) && userId == request.auth.uid &&
+                    isValidUser(incoming()) &&
+                    incoming().uid == request.auth.uid &&
+                    incoming().role == 'user' &&
+                    incoming().createdAt == request.time;
+
+      allow update: if isVerified() && isValidUser(incoming()) && (
+        isAdmin() || 
+        (
+          request.auth.uid == userId &&
+          incoming().uid == existing().uid &&
+          incoming().role == existing().role &&
+          incoming().createdAt == existing().createdAt &&
+          (
+            // Action: Check-in
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['balance', 'lastCheckIn']) &&
+              incoming().balance >= existing().balance + 9.9 &&
+              incoming().balance <= existing().balance + 10.1 &&
+              incoming().lastCheckIn == request.time
+            ) ||
+            // Action: Update bank details
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['bankDetails'])
+            ) ||
+            // Action: Client Balance Adjustments (for Income/Wallet)
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['balance']) &&
+              incoming().balance >= 0
+            )
+          )
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /user_public/{userId} {
+      allow read: if isVerified();
+      allow create: if isVerified() && isValidId(userId) && userId == request.auth.uid &&
+                    isValidUserPublic(incoming()) &&
+                    incoming().uid == request.auth.uid &&
+                    incoming().createdAt == request.time;
+      allow update: if isVerified() && isValidUserPublic(incoming()) && (
+        isAdmin() ||
+        (
+          request.auth.uid == userId &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['totalRecharge'])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /referral_codes/{codeId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /transactions/{transactionId} {
+      allow get: if isVerified() && isValidId(transactionId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (existing().userId == request.auth.uid); // Will be filtered by query but enforced
+      allow list: if isAdmin();
+      
+      allow create: if isVerified() && isValidId(transactionId) &&
+                    isValidTransaction(incoming()) &&
+                    incoming().userId == request.auth.uid &&
+                    incoming().createdAt == request.time;
+                    
+      allow update: if isVerified() && isValidTransaction(incoming()) && isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow get: if isVerified() && isValidId(orderId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isVerified() && existing().userId == request.auth.uid;
+      allow list: if isAdmin();
+      
+      allow create: if isVerified() && isValidId(orderId) &&
+                    isValidOrder(incoming()) &&
+                    incoming().userId == request.auth.uid &&
+                    incoming().createdAt == request.time;
+                    
+      allow update: if isVerified() && isValidOrder(incoming()) && (
+        isAdmin() ||
+        (
+          request.auth.uid == existing().userId &&
+          incoming().userId == existing().userId &&
+          incoming().planId == existing().planId &&
+          incoming().amount == existing().amount &&
+          incoming().duration == existing().duration &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['lastCollectedAt', 'totalObtained', 'remainingDays', 'status', 'lastIncomeAt'])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /redeem_codes/{codeId} {
+      allow get: if isVerified() && isValidId(codeId);
+      allow list: if isAdmin();
+      
+      allow create: if isAdmin() && isValidRedeemCode(incoming()) && incoming().createdAt == request.time;
+      allow update: if isVerified() && isValidRedeemCode(incoming()) && (
+        isAdmin() ||
+        (
+          incoming().code == existing().code &&
+          incoming().amount == existing().amount &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['used', 'usedCount'])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /redemptions/{redemptionId} {
+      allow get: if isVerified() && isValidId(redemptionId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isVerified() && existing().userId == request.auth.uid;
+      allow list: if isAdmin();
+      
+      allow create: if isVerified() && isValidId(redemptionId) &&
+                    isValidRedemption(incoming()) &&
+                    incoming().userId == request.auth.uid &&
+                    incoming().createdAt == request.time;
+                    
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

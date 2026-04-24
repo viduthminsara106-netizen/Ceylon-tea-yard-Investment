@@ -1,0 +1,60 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid || auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      }
+    },
+    "user_public": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "$uid === auth.uid || auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      },
+      ".indexOn": ["referredBy"]
+    },
+    "referral_codes": {
+      ".read": "true",
+      "$code": {
+        ".write": "auth != null || auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      }
+    },
+    "transactions": {
+      ".read": "auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin' || (auth != null && query.orderByChild == 'userId' && query.equalTo == auth.uid)",
+      "$tid": {
+        ".read": "data.child('userId').val() === auth.uid || auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        ".write": "(!data.exists() && newData.child('userId').val() === auth.uid) || auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      },
+      ".indexOn": ["userId", "status", "createdAt"]
+    },
+    "orders": {
+      ".read": "auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin' || (auth != null && query.orderByChild == 'userId' && query.equalTo == auth.uid)",
+      "$oid": {
+        ".read": "data.child('userId').val() === auth.uid || auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        ".write": "(data.exists() && data.child('userId').val() === auth.uid) || (!data.exists() && newData.child('userId').val() === auth.uid) || auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      },
+      ".indexOn": ["userId", "status"]
+    },
+    "redeem_codes": {
+      ".read": "auth != null",
+      ".write": "auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      "$code": {
+        "usedCount": { ".write": "auth != null" },
+        "used": { ".write": "auth != null" }
+      }
+    },
+    "redemptions": {
+      ".read": "auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin' || (auth != null && query.orderByChild == 'userId' && query.equalTo == auth.uid)",
+      "$rid": {
+        ".read": "data.child('userId').val() === auth.uid || auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        ".write": "auth != null && newData.child('userId').val() === auth.uid"
+      },
+      ".indexOn": ["userId"]
+    },
+    "app_settings": {
+      ".read": "true",
+      ".write": "auth.token.email === 'viduthminsara106@gmail.com' || auth.token.email === '07123456@primeshelf.local' || root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    }
+  }
+}

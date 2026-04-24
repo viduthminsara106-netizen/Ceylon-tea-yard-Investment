@@ -1,0 +1,128 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user profile in the application.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "mobileNumber": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "balance": { "type": "number" },
+        "lastCheckIn": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "bankDetails": {
+          "type": "object",
+          "properties": {
+            "holderName": { "type": "string" },
+            "bankName": { "type": "string" },
+            "accountNumber": { "type": "string" }
+          }
+        }
+      },
+      "required": ["uid", "mobileNumber", "role", "balance", "createdAt"]
+    },
+    "UserPublic": {
+      "title": "UserPublic",
+      "description": "Publicly accessible user information for referrals.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "mobileNumber": { "type": "string" },
+        "referredBy": { "type": "string" },
+        "totalRecharge": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "mobileNumber", "totalRecharge", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A financial transaction record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["recharge", "withdraw", "reward", "purchase", "income"] },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed"] },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "type", "status", "createdAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A purchase record for an investment plan.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "planId": { "type": "string" },
+        "amount": { "type": "number" },
+        "dailyIncome": { "type": "number" },
+        "duration": { "type": "number" },
+        "remainingDays": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "completed"] },
+        "lastIncomeAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "planId", "amount", "dailyIncome", "duration", "remainingDays", "status", "createdAt"]
+    },
+    "RedeemCode": {
+      "title": "RedeemCode",
+      "description": "A gift redemption code.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "amount": { "type": "number" },
+        "used": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "amount", "used", "createdAt"]
+    },
+    "Redemption": {
+      "title": "Redemption",
+      "description": "A record of a code redemption.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "code": { "type": "string" },
+        "amount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "code", "amount", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "User profiles."
+    },
+    "user_public": {
+      "schema": "UserPublic",
+      "description": "Public user info for team/referrals."
+    },
+    "transactions": {
+      "schema": "Transaction",
+      "description": "Financial transactions."
+    },
+    "orders": {
+      "schema": "Order",
+      "description": "Plan purchase orders."
+    },
+    "redeem_codes": {
+      "schema": "RedeemCode",
+      "description": "Gift redemption codes."
+    },
+    "redemptions": {
+      "schema": "Redemption",
+      "description": "Redemption logs."
+    },
+    "referral_codes": {
+      "schema": "object",
+      "description": "Mapping from code to user UID."
+    },
+    "settings": {
+      "schema": "object",
+      "description": "Global application settings (e.g. maintenance mode)."
+    }
+  }
+}
