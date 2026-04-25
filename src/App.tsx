@@ -39,20 +39,6 @@ export default function App() {
   const [checkingMaintenance, setCheckingMaintenance] = useState(true);
 
   useEffect(() => {
-    const checkMaintenance = async () => {
-      try {
-        const mSnap = await getDoc(doc(db, 'settings', 'maintenance'));
-        if (mSnap.exists() && mSnap.data()?.enabled === true) {
-          setMaintenanceMode(true);
-        }
-      } catch (e) {
-        console.error("Maintenance check error:", e);
-      } finally {
-        setCheckingMaintenance(false);
-      }
-    };
-    checkMaintenance();
-
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -69,14 +55,30 @@ export default function App() {
               setIsAdmin(false);
             }
           } catch (e: any) {
-            console.error(e);
+            if (e?.code !== 'unavailable') {
+              console.error("Admin check error:", e);
+            }
             setIsAdmin(false);
           }
         }
       } else {
         setIsAdmin(false);
       }
-      setLoading(false);
+      
+      // Check maintenance after auth state is determined
+      try {
+        const mSnap = await getDoc(doc(db, 'settings', 'maintenance'));
+        if (mSnap.exists() && mSnap.data()?.enabled === true) {
+          setMaintenanceMode(true);
+        }
+      } catch (e: any) {
+        if (e?.code !== 'unavailable') {
+          console.error("Maintenance check error:", e);
+        }
+      } finally {
+        setCheckingMaintenance(false);
+        setLoading(false);
+      }
     });
 
     return () => unsubscribe();
